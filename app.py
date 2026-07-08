@@ -15,9 +15,11 @@ login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    # This keeps the session alive so your dashboard can read the user data safely
+     # This keeps the session alive so your dashboard can read the user data safely
     return db.session.get(User, int(user_id))
 
+  
+  
 
 def get_location_from_ip(ip):
     """Asks IPinfo where this IP address is located."""
