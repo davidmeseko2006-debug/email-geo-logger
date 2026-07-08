@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: email-geo-logger
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
