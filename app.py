@@ -85,7 +85,10 @@ def login():
     login_user(user)
     return redirect(url_for('dashboard'))
 
+# Look for your existing app.run or initialization block and update it to this:
+with app.app_context():
+    db.create_all()  # This ensures the database tables are created automatically on Render
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all() # Creates the database files on local engine initialization
     app.run(debug=True)
+
