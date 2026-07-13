@@ -2,28 +2,31 @@ import os
 import requests
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from werkzeug.user_agent import UserAgent
+from user_agents import parse
 from models import db, User, EmailLog
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'dev-secret-key-123'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db' # Stores data in a local file
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True}
 
 db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+with app.app_context():
+    db.session.configure(expire_on_commit=False) # Bulletproof session fix for cloud servers
+
 @login_manager.user_loader
 def load_user(user_id):
     try:
-        # This keeps the session alive so your dashboard can read the user data safely
         return db.session.get(User, int(user_id))
     except Exception:
         return None
 
 def get_location_from_ip(ip):
-    """Asks IPinfo where this IP address is located."""
-    if ip in ['127.0.0.1', 'localhost', '::1']:
+    """Queries IPinfo for the physical location of the public IP."""
+    if ip in ['127.0.0.1', 'localhost', '::1'] or ip.startswith('10.') or ip.startswith('192.'):
         return "Local Network", "Localhost"
     try:
         response = requests.get(f"https://ipinfo.io{ip}/json", timeout=4).json()
@@ -39,19 +42,23 @@ def send_email():
         subject = request.form.get('subject')
         body = request.form.get('body')
         
-        # 1. Grab IP parameters
-        ip_address = request.remote_addr
+        # FIX: Force Python to bypass Render's proxy filter and grab the REAL device IP
+        if request.headers.getlist("X-Forwarded-For"):
+            ip_address = request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
+        else:
+            ip_address = request.remote_addr
             
-        # 2. Extract agent hardware configurations
-        ua = UserAgent(request.headers.get('User-Agent', ''))
-        browser = ua.browser or "Unknown"
-        os_system = ua.platform or "Unknown"
+        # FIX: Extract real Browser and OS names using user_agents
+        ua_string = request.headers.get('User-Agent', '')
+        user_agent = parse(ua_string)
+        browser = f"{user_agent.browser.family}"
+        os_system = f"{user_agent.os.family}"
         
-        # 3. Look up locations
+        # Get real locations
         country, city = get_location_from_ip(ip_address)
         
         try:
-            # 4. Save metadata to your database
+            # Save the logged transaction metadata straight to the database
             new_log = EmailLog(
                 recipient=recipient, subject=subject, body=body,
                 ip_address=ip_address, browser=browser, operating_system=os_system,
@@ -76,7 +83,6 @@ def dashboard():
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    # Automatically logs in a temporary test profile for easier UI verification
     user = User.query.first()
     if not user:
         with app.app_context():
@@ -87,10 +93,7 @@ def login():
     login_user(user)
     return redirect(url_for('dashboard'))
 
-# Look for your existing app.run or initialization block and update it to this:
-with app.app_context():
-    db.create_all()  # This ensures the database tables are created automatically on Render
-
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all() # Automatically builds SQL schema layout tables on startup
     app.run(debug=True)
-
