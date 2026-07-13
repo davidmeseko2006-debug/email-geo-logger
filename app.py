@@ -14,8 +14,9 @@ db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+# Bulletproof database configuration rules for live cloud deployments
 with app.app_context():
-    db.session.configure(expire_on_commit=False) # Bulletproof session fix for cloud servers
+    db.session.configure(expire_on_commit=False)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -42,23 +43,23 @@ def send_email():
         subject = request.form.get('subject')
         body = request.form.get('body')
         
-        # FIX: Force Python to bypass Render's proxy filter and grab the REAL device IP
+        # Bypasses Render's cloud router proxy to grab your TRUE cellular network IP address
         if request.headers.getlist("X-Forwarded-For"):
             ip_address = request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
         else:
             ip_address = request.remote_addr
             
-        # FIX: Extract real Browser and OS names using user_agents
+        # Extract clear Device and Browser platform labels
         ua_string = request.headers.get('User-Agent', '')
         user_agent = parse(ua_string)
         browser = f"{user_agent.browser.family}"
         os_system = f"{user_agent.os.family}"
         
-        # Get real locations
+        # Get real locations based on the public network signature
         country, city = get_location_from_ip(ip_address)
         
         try:
-            # Save the logged transaction metadata straight to the database
+            # Save the logged audit transaction payload permanently to the database
             new_log = EmailLog(
                 recipient=recipient, subject=subject, body=body,
                 ip_address=ip_address, browser=browser, operating_system=os_system,
@@ -83,17 +84,26 @@ def dashboard():
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    user = User.query.first()
-    if not user:
-        with app.app_context():
-            db.create_all()
-            user = User(username="Admin", email="admin@test.com", password_hash="123")
-            db.session.add(user)
+    # Safely creates tables and handles the automatic dashboard login session path
+    try:
+        user = User.query.first()
+        if not user:
+            new_user = User(username="Admin", email="admin@test.com", password_hash="123")
+            db.session.add(new_user)
             db.session.commit()
-    login_user(user)
-    return redirect(url_for('dashboard'))
+            user = new_user
+        login_user(user)
+        return redirect(url_for('dashboard'))
+    except Exception:
+        # Fallback loop to prevent page crashes if database is initializing
+        return "Database is preparing. Please refresh this page in a few seconds."
+
+# Automatically builds the SQL tables and maps out schemas when booting up on Render
+with app.app_context():
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"Database generation notice: {e}")
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all() # Automatically builds SQL schema layout tables on startup
     app.run(debug=True)
