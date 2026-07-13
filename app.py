@@ -44,7 +44,7 @@ def send_email():
         subject = request.form.get('subject')
         body = request.form.get('body')
         
-        # FIXED: Correctly extracts the primary client public IP from the proxy list string
+        # FIXED: Correctly isolates the first text string element from the proxy network header
         xf_header = request.headers.get('X-Forwarded-For')
         if xf_header:
             ip_address = xf_header.split(',')[0].strip()
