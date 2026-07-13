@@ -27,15 +27,14 @@ def load_user(user_id):
 
 def get_location_from_ip(ip):
     """Queries IPinfo for the physical location of the public IP."""
-    if ip in ['127.0.0.1', 'localhost', '::1'] or ip.startswith('10.') or ip.startswith('192.'):
+    if not ip or ip in ['127.0.0.1', 'localhost', '::1'] or ip.startswith('10.') or ip.startswith('192.'):
         return "Local Network", "Localhost"
     try:
-        # Your personal access token is now attached to the web link below
+        # Your active access token is attached here
         response = requests.get(f"https://ipinfo.io{ip}/json?token=a730a08fce9fba", timeout=4).json()
         return response.get('country', 'Unknown'), response.get('city', 'Unknown')
     except Exception:
         return "Error", "Error"
-
 
 @app.route('/send-email', methods=['GET', 'POST'])
 @login_required
@@ -45,9 +44,10 @@ def send_email():
         subject = request.form.get('subject')
         body = request.form.get('body')
         
-        # Bypasses Render's cloud router proxy to grab your TRUE cellular network IP address
-        if request.headers.getlist("X-Forwarded-For"):
-            ip_address = request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
+        # FIXED: Correctly extracts the primary client public IP from the proxy list string
+        xf_header = request.headers.get('X-Forwarded-For')
+        if xf_header:
+            ip_address = xf_header.split(',')[0].strip()
         else:
             ip_address = request.remote_addr
             
@@ -97,7 +97,6 @@ def login():
         login_user(user)
         return redirect(url_for('dashboard'))
     except Exception:
-        # Fallback loop to prevent page crashes if database is initializing
         return "Database is preparing. Please refresh this page in a few seconds."
 
 # Automatically builds the SQL tables and maps out schemas when booting up on Render
