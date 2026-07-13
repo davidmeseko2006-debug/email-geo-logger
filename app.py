@@ -30,10 +30,12 @@ def get_location_from_ip(ip):
     if ip in ['127.0.0.1', 'localhost', '::1'] or ip.startswith('10.') or ip.startswith('192.'):
         return "Local Network", "Localhost"
     try:
-        response = requests.get(f"https://ipinfo.io{ip}/json", timeout=4).json()
+        # Your personal access token is now attached to the web link below
+        response = requests.get(f"https://ipinfo.io{ip}/json?token=a730a08fce9fba", timeout=4).json()
         return response.get('country', 'Unknown'), response.get('city', 'Unknown')
     except Exception:
         return "Error", "Error"
+
 
 @app.route('/send-email', methods=['GET', 'POST'])
 @login_required
